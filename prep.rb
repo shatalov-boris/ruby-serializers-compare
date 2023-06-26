@@ -6,13 +6,13 @@ gemfile(true) do
   source "https://rubygems.org"
   git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
-  gem "active_model_serializers"
-  gem "activerecord", "6.1.3"
-  gem "alba", path: '../'
+  gem "active_model_serializers", '0.9.7'
+  gem "activerecord", "~> 5.1"
+  gem "alba"
   gem "benchmark-ips"
   gem "benchmark-memory"
   gem "blueprinter"
-  gem "fast_serializer_ruby"
+  gem "jsonapi-serializer"
   gem "jbuilder"
   gem 'turbostreamer'
   gem "jserializer"

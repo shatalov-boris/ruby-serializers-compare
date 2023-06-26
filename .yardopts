@@ -1,4 +1,0 @@
---no-private
---exclude lib/alba/version.rb
---embed-mixin ClassMethods
---embed-mixin InstanceMethods

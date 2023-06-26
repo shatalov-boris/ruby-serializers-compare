@@ -3,6 +3,25 @@
 
 require_relative 'prep'
 
+# --- jsonapi serializer ---
+require "jsonapi/serializer"
+
+class JsonApiCommentResource
+  include JSONAPI::Serializer
+  set_type :comments
+  attributes :id, :body
+end
+
+class JsonApiPostResource
+  include JSONAPI::Serializer
+  set_type :post
+  attributes :id, :body
+  attribute :commenter_names do |post|
+    post.commenters.pluck(:name)
+  end
+  has_many :comments, serializer: JsonApiCommentResource
+end
+
 # --- Alba serializers ---
 
 require "alba"
@@ -25,15 +44,16 @@ end
 
 require "active_model_serializers"
 
-ActiveModelSerializers.logger = Logger.new(nil)
+# ActiveModelSerializers.logger = Logger.new(nil)
 
 class AMSCommentSerializer < ActiveModel::Serializer
   attributes :id, :body
 end
 
 class AMSPostSerializer < ActiveModel::Serializer
-  attributes :id, :body
-  attribute :commenter_names
+  attributes :id, :body, :commenter_names
+  # attributes :id, :body
+  # attribute :commenter_names
   has_many :comments, serializer: AMSCommentSerializer
 
   def commenter_names
@@ -58,27 +78,6 @@ class PostBlueprint < Blueprinter::Base
   end
 end
 
-# --- Fast Serializer Ruby
-
-require "fast_serializer"
-
-class FastSerializerCommentResource
-  include ::FastSerializer::Schema::Mixin
-  attributes :id, :body
-end
-
-class FastSerializerPostResource
-  include ::FastSerializer::Schema::Mixin
-
-  attributes :id, :body
-
-  attribute :commenter_names do
-    object.commenters.pluck(:name)
-  end
-
-  has_many :comments, serializer: FastSerializerCommentResource
-end
-
 # --- Jserializer serializers ---
 
 require 'jserializer'
@@ -90,6 +89,7 @@ end
 class JserializerPostSerializer < Jserializer::Base
   attributes :id, :body, :commenter_names
   has_many :comments, serializer: JserializerCommentSerializer
+
   def commenter_names
     object.commenters.pluck(:name)
   end
@@ -103,7 +103,6 @@ require "panko_serializer"
 class PankoCommentSerializer < Panko::Serializer
   attributes :id, :body
 end
-
 
 class PankoPostSerializer < Panko::Serializer
   attributes :id, :body, :commenter_names
@@ -216,14 +215,15 @@ alba_inline = Proc.new do
     end
   end
 end
-ams = Proc.new { ActiveModelSerializers::SerializableResource.new(posts, {each_serializer: AMSPostSerializer}).to_json }
+
+# ams = Proc.new { ActiveModelSerializers::SerializableResource.new(posts, {each_serializer: AMSPostSerializer}).to_json }
+ams = Proc.new { ActiveModel::ArraySerializer.new(posts, each_serializer: AMSPostSerializer).to_json }
 blueprinter = Proc.new { PostBlueprint.render(posts) }
-fast_serializer = Proc.new { FastSerializerPostResource.new(posts).to_json }
 jserializer = Proc.new { JserializerPostSerializer.new(posts, is_collection: true).to_json }
 panko = proc { Panko::ArraySerializer.new(posts, each_serializer: PankoPostSerializer).to_json }
-primalize = proc { PrimalizePostsResource.new(posts: posts).to_json }
+json_api = proc { JsonApiPostResource.new(posts, { include: [:comments] }).serializable_hash.to_json }
 rails = Proc.new do
-  ActiveSupport::JSON.encode(posts.map{ |post| post.serializable_hash(include: :comments) })
+  ActiveSupport::JSON.encode(posts.map { |post| post.serializable_hash(include: :comments) })
 end
 representable = Proc.new { PostsRepresenter.new(posts).to_json }
 simple_ams = Proc.new { SimpleAMS::Renderer::Collection.new(posts, serializer: SimpleAMSPostSerializer).to_json }
@@ -238,9 +238,9 @@ parsed_correct = JSON.parse(correct)
   alba_inline: alba_inline,
   ams: ams,
   blueprinter: blueprinter,
-  fast_serializer: fast_serializer,
   jserializer: jserializer,
   panko: panko,
+  json_api: json_api,
   rails: rails,
   representable: representable,
   simple_ams: simple_ams,
@@ -259,9 +259,9 @@ Benchmark.ips do |x|
   x.report(:alba_inline, &alba_inline)
   x.report(:ams, &ams)
   x.report(:blueprinter, &blueprinter)
-  x.report(:fast_serializer, &fast_serializer)
   x.report(:jserializer, &jserializer)
   x.report(:panko, &panko)
+  x.report(:json_api, &json_api)
   x.report(:rails, &rails)
   x.report(:representable, &representable)
   x.report(:simple_ams, &simple_ams)
@@ -270,16 +270,15 @@ Benchmark.ips do |x|
   x.compare!
 end
 
-
 require 'benchmark/memory'
 Benchmark.memory do |x|
   x.report(:alba, &alba)
   x.report(:alba_inline, &alba_inline)
   x.report(:ams, &ams)
   x.report(:blueprinter, &blueprinter)
-  x.report(:fast_serializer, &fast_serializer)
   x.report(:jserializer, &jserializer)
   x.report(:panko, &panko)
+  x.report(:json_api, &json_api)
   x.report(:rails, &rails)
   x.report(:representable, &representable)
   x.report(:simple_ams, &simple_ams)
